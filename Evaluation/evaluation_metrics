@@ -1,0 +1,107 @@
+% Function to calculate precision, recall, F1 score, and match ground truth with predictions based on IoU
+% Make sure the groundTruthBoxes contain labels where 'good' is represented as 1 and 'bad' as 0.
+function [precision, recall, f1] = evaluation_metrics(groundTruthBoxes, predBBoxes, classification, iouThreshold)
+    % Convert 'good'/'bad' labels to numeric (good = 1, bad = 0)
+    numericClassification = zeros(size(classification));
+    numericClassification(strcmp(classification, 'good')) = 1;
+
+    % Append the numeric classification to the predicted boxes
+    predictedBoxes = [predBBoxes, numericClassification];
+
+    numGT = size(groundTruthBoxes, 1);  % Number of ground truth boxes
+    numPred = size(predictedBoxes, 1);  % Number of predicted boxes
+    
+    % Initialize matched labels for ground truth boxes (0 means no match)
+    ious = zeros(numGT, 1);
+    matchedLabels = zeros(numGT, 1);
+
+    % Iterate through each ground truth box
+    for i = 1:numGT
+        gtBox = groundTruthBoxes(i, 1:4);  % Extract the ground truth box coordinates
+        maxIoU = 0;  % Initialize max IoU value
+        matchedPredLabel = 0;  % Default no match (label 0)
+        
+        % Compare with all predicted boxes
+        for j = 1:numPred
+            predBox = predictedBoxes(j, 1:4);  % Predicted box coordinates
+            predLabel = predictedBoxes(j, 5);  % Predicted label
+            
+            % Calculate IoU between the ground truth and predicted box
+            currentIoU = calculate_iou(gtBox, predBox);
+            
+            % If IoU exceeds threshold and is the highest so far, update match
+            if currentIoU > maxIoU && currentIoU >= iouThreshold
+                maxIoU = currentIoU;
+                matchedPredLabel = predLabel;
+            end
+        end
+        
+        % Assign label to ground truth box based on match
+        ious(i) = maxIoU;
+        matchedLabels(i) = matchedPredLabel;
+    end
+
+    % Calculate True Positives (TP), False Positives (FP), and False Negatives (FN)
+    groundTruthLabels = groundTruthBoxes(:, 5);  % Ground truth labels (1 or 0)
+    
+    TP = sum((matchedLabels == 1) & (groundTruthLabels == 1)); % Correctly predicted positives
+    FP = sum((matchedLabels == 1) & (groundTruthLabels == 0)); % Incorrectly predicted positives
+    FN = sum((matchedLabels == 0) & (groundTruthLabels == 1)); % Missed positives
+    
+    % Handle edge case when there are no positive predictions or ground truth
+    if TP + FP == 0
+        precision = 0;
+    else
+        precision = TP / (TP + FP);  % Precision formula
+    end
+    
+    if TP + FN == 0
+        recall = 0;
+    else
+        recall = TP / (TP + FN);  % Recall formula
+    end
+    
+    % Calculate F1-Score
+    if precision + recall == 0
+        f1 = 0;  % Avoid division by zero
+    else
+        f1 = 2 * (precision * recall) / (precision + recall);  % F1-score formula
+    end
+
+    % Display the precision, recall, and F1 score
+    disp(['Precision: ', num2str(precision)]);
+    disp(['Recall: ', num2str(recall)]);
+    disp(['F1 Score: ', num2str(f1)]);
+
+    % Print IoUs and matched labels (for debugging purposes)
+     disp('IoUs for each ground truth box:');
+     disp(ious);
+     disp('Matched labels for each ground truth box:');
+     disp(matchedLabels);
+end
+
+% Helper function to calculate IoU between two bounding boxes
+function iou = calculate_iou(boxA, boxB)
+    % Calculate intersection coordinates
+    xA = max(boxA(1), boxB(1));
+    yA = max(boxA(2), boxB(2));
+    xB = min(boxA(1) + boxA(3), boxB(1) + boxB(3));
+    yB = min(boxA(2) + boxA(4), boxB(2) + boxB(4));
+    
+    % Calculate intersection area
+    interArea = max(0, xB - xA) * max(0, yB - yA);
+    
+    % Calculate areas of both rectangles
+    areaA = boxA(3) * boxA(4);
+    areaB = boxB(3) * boxB(4);
+    
+    % Calculate union area
+    unionArea = areaA + areaB - interArea;
+    
+    % Avoid division by zero
+    if unionArea == 0
+        iou = 0;
+    else
+        iou = interArea / unionArea;
+    end
+end

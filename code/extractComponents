@@ -1,0 +1,78 @@
+function finalBBoxes = extractComponents(grayImage)
+    % Apply median filtering to reduce noise
+    grayImage = medfilt2(grayImage, [3 3]);
+    
+    % Apply edge detection using Sobel edge detection technique
+    edges = edge(grayImage, 'sobel');
+
+    % Apply morphological operations to clean up small noise
+    se = strel('square', 7);
+    cleanedEdges = imdilate(edges, se);
+    cleanedEdges = imerode(cleanedEdges, se);
+    
+    % Detect boundaries of squares
+    squareBounds = bwboundaries(cleanedEdges);
+    
+    % Extract the bounding box from the boundary points
+    initBBoxes = [];
+    for k = 1 : length(squareBounds)
+        boundary = squareBounds{k};
+
+        minX = min(boundary(:,2));
+        maxX = max(boundary(:,2));
+        minY = min(boundary(:,1));
+        maxY = max(boundary(:,1));
+        
+        initBBoxes = [initBBoxes; minX, minY, maxX - minX + 1, maxY - minY + 1];
+    end
+    
+    % Filter out bounding boxes based on sizes
+    minArea = 715.186;
+    maxArea = 14343.7899;
+    finalBBoxes = [];
+    for i = 1:size(initBBoxes, 1)
+        w = initBBoxes(i, 3);
+        h = initBBoxes(i, 4);
+        area = w * h;
+        
+        if area >= minArea && area <= maxArea
+            finalBBoxes = [finalBBoxes; initBBoxes(i,:)];
+        end
+    end
+    
+    % Cluster close bounding boxes into one larger box by increasing distance threshold
+    cTresh = 48.2598;
+    
+    for i = 1:size(finalBBoxes, 1)
+        for j = i+1:size(finalBBoxes, 1)
+            boxA = finalBBoxes(i,:);
+            boxB = finalBBoxes(j,:);
+            
+            centerA = [boxA(1) + boxA(3)/2, boxA(2) + boxA(4)/2];
+            centerB = [boxB(1) + boxB(3)/2, boxB(2) + boxB(4)/2];
+            distOfCenters = sqrt(sum((centerA - centerB).^2));
+            
+            if distOfCenters < cTresh
+                mergedBoxXLeft   = min(boxA(1), boxB(1));
+                mergedBoxYTop    = min(boxA(2), boxB(2));
+                mergedBoxWidth   = max(boxA(1) + boxA(3), boxB(1) + boxB(3)) - mergedBoxXLeft; 
+                mergedBoxHeight  = max(boxA(2) + boxA(4), boxB(2) + boxB(4)) - mergedBoxYTop;
+                
+                finalBBoxes(i,:) = [mergedBoxXLeft, mergedBoxYTop, mergedBoxWidth, mergedBoxHeight];
+                finalBBoxes(j,:) = [-inf -inf -inf -inf];
+            end
+        end
+    end
+    
+    % Remove invalid entries of Bounding Boxes after merging
+    finalBBoxes(any(finalBBoxes == -inf, 2), :) = [];
+    
+    % % Visualize detected components
+    % imshow(grayImage);
+    % hold on;
+    % title('Bounding Boxes for components detected');
+    % for k = 1 : size(finalBBoxes, 1)
+    %     rectangle('Position', finalBBoxes(k,:), 'EdgeColor', 'y', 'LineWidth', 2);
+    % end
+    % hold off;
+end

@@ -1,0 +1,69 @@
+function [predictedBoxes, predictedLabels] = classifyComponents(grayImage, finalBBoxes, thresholdValue, optiFlag)
+    % Initialize arrays for classification
+    goodComponents = [];
+    badComponents = [];
+    noComponents = [];
+    predictedLabels = [];
+    wavelengths = [2 3 4 5];
+    orientations = [0 45 90 135];
+
+    for i = 1:size(finalBBoxes, 1)
+        bbox = finalBBoxes(i,:);
+        componentImg = imcrop(grayImage, bbox);
+        componentImg = imresize(componentImg, [64 64]);
+        
+        % Initialize a variable to store the maximum mean response
+        maxMeanResponse = -Inf;
+        
+        % Apply Gabor filters at different orientations and scales
+        for w = wavelengths
+            orientationResponses = []; % Store responses for each orientation
+            for theta = orientations
+                gaborArray = gabor(w, theta);
+                gaborMag = imgaborfilt(componentImg, gaborArray);
+                meanResponse = mean(gaborMag(:));
+                
+                % Save the mean response for this orientation
+                orientationResponses = [orientationResponses; meanResponse];
+            end
+            
+            % Find the maximum mean response for this wavelength
+            maxOrientationResponse = max(orientationResponses);
+            
+            % Update the maximum mean response across all orientations and wavelengths
+            if maxOrientationResponse > maxMeanResponse
+                maxMeanResponse = maxOrientationResponse;
+            end
+        end
+
+        % disp(maxMeanResponse);
+        % Use the maximum mean response for classification
+        if maxMeanResponse > thresholdValue  
+            classLabel = 1;         % Assign class "1"
+            goodComponents = [goodComponents; bbox];
+        else  
+            classLabel = 2;         % Assign class "2"
+            badComponents = [badComponents; bbox];
+        end
+        
+        predictedLabels(i) = classLabel;   % Store predicted label
+    end
+
+    predictedBoxes = finalBBoxes;   % Return bounding boxes as predictions
+
+    % if ~optiFlag
+    %     % Visualize results on image (optional)
+    %     imshow(grayImage); hold on;
+    %     for i = 1:size(goodComponents, 1)
+    %         rectangle('Position', goodComponents(i,:), 'EdgeColor', 'g', 'LineWidth', 2);
+    %     end
+    %     for i = 1:size(badComponents, 1)
+    %         rectangle('Position', badComponents(i,:), 'EdgeColor', 'r', 'LineWidth', 2);
+    %     end
+    %     for i = 1:size(noComponents, 1)
+    %         rectangle('Position', noComponents(i,:), 'EdgeColor', 'b', 'LineWidth', 2);
+    %     end
+    %     title("Classification Prediction")
+    %     hold off;
+    % end
+end
